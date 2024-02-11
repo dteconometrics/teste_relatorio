@@ -1,0 +1,72 @@
+
+
+```{r echo=FALSE}
+
+dados_brutos_nucleos <- rbcb::get_series(
+  code = c(
+     "EX0" = 11427,
+    "EX3" = 27839,
+    "MS" = 4466,
+    "DP" = 16122,
+    "P55" = 28750
+  ),
+  start_date = "2020-01-01",
+  as = "tibble"
+)
+
+```
+
+
+
+```{r echo=FALSE}
+
+# Coleta dados
+dados_brutos_nucleos <- rbcb::get_series(
+  code = c(
+    "EX0" = 11427,
+    "EX3" = 27839,
+    "MS" = 4466,
+    "DP" = 16122,
+    "P55" = 28750
+    ),
+  start_date = "2020-01-01",
+  as = "tibble"
+  )
+
+dados_brutos_ipca <- rbcb::get_series(
+  code = c("Meta % anual" = 13521, "Var. % mensal" = 433),
+  start_date = "2019-01-01"
+  )
+
+# Trata dados
+dados_limpos_nucleos <- dados_brutos_nucleos |> 
+  purrr::reduce(.f = dplyr::full_join, by = "date") |> 
+  dplyr::arrange(date) |> 
+  dplyr::rowwise() |> 
+  dplyr::mutate(
+    `Média dos núcleos` = mean(c(EX0, EX3, MS, DP, P55), na.rm = TRUE)
+    ) |> 
+  dplyr::ungroup() |> 
+  tidyr::pivot_longer(cols = -"date", names_to = "variavel", values_to = "valor")
+
+dados_limpos_ipca <- dados_brutos_ipca |> 
+  purrr::reduce(.f = dplyr::full_join, by = "date") |> 
+  dplyr::arrange(date) |> 
+  tidyr::fill(`Meta % anual`, .direction = "down") |> 
+  dplyr::mutate(
+    `Var. % anual` = (RcppRoll::roll_prodr(x = (`Var. % mensal` / 100) + 1, n = 12) - 1) * 100
+    ) |> 
+  tidyr::drop_na() |> 
+  tidyr::pivot_longer(cols = -"date", names_to = "variavel", values_to = "valor")
+
+
+
+```
+
+```{r}
+```
+
+
+```{r}
+```
+

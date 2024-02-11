@@ -1,0 +1,156 @@
+---
+title: "<img src ='logo2.png' height='40'> Relatório de inflação - IPCA"
+author: "Vinicius Limeira"
+date: "2023-12-12"
+lang: pt
+format:
+  html:               # opções globais do formato do documento
+    page-layout: full # layout cheio
+    fig-align: center # gráficos alinhados ao centro horiontalmente
+    fig-width: 6      # largura de gráficos
+    fig-height: 4     # altura de gráficos
+    fig-dpi: 600      # DPI de gráficos
+execute:              # opções globais de execução do documento
+  echo: false         # não exige blocos de códigos no documento
+  message: false      # não exibe mensagens resultantes de códigos
+  warning: false      # não exibe avisos resultantes de códigos
+---
+
+```{r echo=FALSE}
+
+# Carrega pacotes -----------
+
+library(rbcb)
+library(purrr)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(RcppRoll)
+library(ggplot2)
+library(quarto)
+
+# Coleta dados -----------
+dados_brutos_nucleos <- rbcb::get_series(
+  code = c(
+    "EX0" = 11427,
+    "EX3" = 27839,
+    "MS" = 4466,
+    "DP" = 16122,
+    "P55" = 28750
+    ),
+  start_date = "2020-01-01",
+  as = "tibble"
+  )
+
+dados_brutos_ipca <- rbcb::get_series(
+  code = c("Meta % anual" = 13521, "Var. % mensal" = 433),
+  start_date = "2019-01-01"
+  )
+
+# Trata dados
+dados_limpos_nucleos <- dados_brutos_nucleos |> 
+  purrr::reduce(.f = dplyr::full_join, by = "date") |> 
+  dplyr::arrange(date) |> 
+  dplyr::rowwise() |> 
+  dplyr::mutate(
+    `Média dos núcleos` = mean(c(EX0, EX3, MS, DP, P55), na.rm = TRUE)
+    ) |> 
+  dplyr::ungroup() |> 
+  tidyr::pivot_longer(cols = -"date", names_to = "variavel", values_to = "valor")
+
+dados_limpos_ipca <- dados_brutos_ipca |> 
+  purrr::reduce(.f = dplyr::full_join, by = "date") |> 
+  dplyr::arrange(date) |> 
+  tidyr::fill(`Meta % anual`, .direction = "down") |> 
+  dplyr::mutate(
+    `Var. % anual` = (RcppRoll::roll_prodr(x = (`Var. % mensal` / 100) + 1, n = 12) - 1) * 100
+    ) |> 
+  tidyr::drop_na() |> 
+  tidyr::pivot_longer(cols = -"date", names_to = "variavel", values_to = "valor")
+
+# Objetos auxiliares para inline code ----------
+ult_ipca <- dados_limpos_ipca |> 
+  dplyr::group_by(variavel) |> 
+  dplyr::filter(date == max(date)) |> 
+  dplyr::ungroup() |>
+  dplyr::mutate(
+    date = format(date, format = "%m/%Y"),
+    valor = format(valor, digits = 2, nsmall = 2, big.mark = ".", decimal.mark = ",")
+    ) |> 
+  tidyr::pivot_wider(id_cols = "date", names_from = "variavel", values_from = "valor")
+
+
+
+```
+
+::: {.grid}
+
+::: {.g-col-7}
+
+## Inflação cheia
+
+Principais destaques para o Índice nacional de preços ao consumidor-amplo (IPCA):
+
+- O IPCA variou `r ult_ipca[["Var. % mensal"]]`% no mês de `r ult_ipca[["date"]]` em relação ao mês anterior.
+- Em termos anuais, o IPCA acumula `r ult_ipca[["Var. % anual"]]`% nos últimos 12 meses.
+- Para o ano de `r substr(ult_ipca[["date"]], 4, 7)` a meta de inflação é de `r ult_ipca[["Meta % anual"]]`%.
+As informações são, quando não explicitamente referenciadas, do IBGE.
+
+::: {.callout-note}
+### **Conceito**
+IPCA é a sigla de Índice Nacional de Preços ao Consumidor Amplo, um índice de preços produzido pelo IBGE. Trata-se de uma medida acumulada do comportamento dos preços de bens e serviços da economia brasileira. A inflação é a taxa de crescimento deste índice.
+:::
+
+## Núcleos da inflação
+
+- Item 1
+- Item 2
+- Item 3
+:::
+
+:::{.g-col-5}
+
+```{r}
+# Gráfico do IPCA (mensal, anual) e Meta
+dados_limpos_ipca |> 
+  ggplot2::ggplot() +
+  ggplot2::aes(x = date, y = valor, color = variavel, linetype = variavel) +
+  ggplot2::geom_hline(yintercept = 0, linetype = "dashed") +
+  ggplot2::geom_line(linewidth = 1) +
+  ggplot2::labs(
+    title = "Inflação cheia (IPCA)",
+    y = NULL,
+    x = NULL,
+    color = NULL,
+    linetype = NULL,
+    caption = "Dados: BCB e IBGE | Elaboração: Análise Macro"
+    ) +
+  ggplot2::theme_gray(base_size = 16) +
+  ggplot2::theme(legend.position = "top")
+```
+
+```{r}
+# Gráfico dos Núcleos do IPCA
+dados_limpos_nucleos |> 
+  ggplot2::ggplot() +
+  ggplot2::aes(x = date, y = valor, color = variavel) +
+  ggplot2::geom_hline(yintercept = 0, linetype = "dashed") +
+  ggplot2::geom_line(linewidth = 1) +
+  ggplot2::facet_wrap(facets = ~variavel) +
+  ggplot2::labs(
+    title = "Núcleos da inflação (IPCA)",
+    y = "Var. % mensal",
+    x = NULL,
+    color = NULL,
+    caption = "Dados: BCB | Elaboração: Análise Macro"
+    ) +
+  ggplot2::theme_gray(base_size = 16) +
+  ggplot2::theme(legend.position = "bottom")
+```
+
+
+
+
+:::
+
+:::
+
